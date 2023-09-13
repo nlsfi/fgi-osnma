@@ -1,0 +1,6 @@
+bitstring==3.1.9
+crc16==0.1.1
+cryptography==41.0.3
+leapseconds>=2023.4.0
+numpy==1.25.1
+pyserial==3.5

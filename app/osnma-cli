@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+import sys
+sys.path.insert(0, '..')
+
+import argparse
+from bitstring import BitArray
+
+from datasource.sbf.sbfparser import SbfBlockFactory
+from datasource.sources import SourceException, Source
+from osnma.navdata import SubframeFactory
+from osnma.engine import OsnmaEngine
+from datasource.pagereader import PageReader
+from crypto.merkletree import MerkleTree
+
+from datasink.subconfig import subscriber_system
+
+DESCRIPTION="""
+Command line interface for Galileo OSNMA processing.
+"""
+INPUT_DESCRIPTION="""
+Input configuration. Examples:
+filepath                - Reads data from the given filepath
+file:filepath           - Same as above, only more explicit
+serial:dev:baudrate     - Read from a serial device
+net:ip:port             - Read data from the network
+"""
+
+# Creating a datasource from a string
+def source(string):
+    try:
+        return (Source.from_string(string))
+    except:
+        raise (argparse.ArgumentError)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=DESCRIPTION,
+                                     formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument("-i", "--input", type=source, required=True,
+                        help=INPUT_DESCRIPTION)
+    parser.add_argument("-p", "--protocol", type=str,
+                        choices=['sbf', 'ascii'], default='sbf',
+                        help="Protocol/format of the input, such as SBF")
+    parser.add_argument("-k", "--public-key-path", type=str,
+                        help="Path to public key file (pem)")
+    parser.add_argument("-r", "--root-key-path", type=str,
+                        help="Path to the TESLA root key")
+    parser.add_argument("-m", "--merkle-tree", type=str,
+                        help="Path to the Merkle tree file")
+    parser.add_argument("-g", "--allow-gaps", action="store_true",
+                        help="Allow gaps in the subframes")
+    args = parser.parse_args()
+
+    reader = PageReader.from_string(args.protocol, args.input)
+    sf_factory = SubframeFactory(reader, args.allow_gaps)
+    public_key = open(args.public_key_path).read()
+    osnma = OsnmaEngine(public_key)
+    osnma.set_subscriber_system(subscriber_system)
+
+    # Hot start
+    # KROOT from the test vectors, might not work with other data
+    if args.root_key_path:
+        dsm_kroot = BitArray(hex=open(args.root_key_path, "r").readline().rstrip())
+        osnma.decoder.input_dsm_kroot(dsm_kroot)
+
+    # Merkle tree for public key verification
+    if args.merkle_tree:
+        merkle_tree = MerkleTree.from_file(args.merkle_tree)
+        osnma.authenticator.merkle_tree = merkle_tree
+
+    try:
+        while True:
+            subframe = sf_factory.read()
+            if subframe == None:
+                continue
+            osnma.process_subframe(subframe)
+    except SourceException as e:
+        print(e)
+    except SbfBlockFactory.InvalidBlockException as e:
+        print(e)
+    except KeyboardInterrupt:
+        pass

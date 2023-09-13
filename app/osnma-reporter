@@ -1,0 +1,272 @@
+#!/usr/bin/env python
+import sys
+sys.path.insert(0, '..')
+
+import argparse
+import datetime
+import re
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+import util.gst as gst
+
+DESCRIPTION="""
+Produce visualization and compute statistics from authentication events.
+"""
+
+def read_auths(log):
+    """Read successful authentication from a log.
+
+    :log: file with the output of the FGI-OSNMA.
+    :returns: successful authentications as numpy array.
+    Columns: wn, tow, prnd, prna, adkd.
+
+    """
+    pattern = re.compile('AuthAttempt\(PRND=(\d+), PRNA=(\d+), wn=(\d+), tow=(\d+), adkd=(\d+), outcome=<AuthOutcome\.OK.*')
+    res = np.zeros((0, 4))
+    with open(log, 'r') as f:
+        for line in f:
+            m = pattern.match(line)
+            if m:
+                prnd = int(m.group(1))
+                prna = int(m.group(2))
+                wn = int(m.group(3))
+                tow = int(m.group(4))
+                adkd = int(m.group(5))
+                epoch = gst.gst2timestamp(wn, tow)
+                record = np.array([epoch, prnd, prna, adkd]).reshape(1, -1)
+                res = np.concatenate((res, record), axis=0)
+    return res
+
+def read_invalid_tags(log):
+    """Read successful authentication from a log.
+
+    :log: file with the output of the FGI-OSNMA.
+    :returns: failed authentications as numpy array.
+    Columns: wn, tow, prnd, prna, adkd.
+
+    """
+    pattern = re.compile('AuthAttempt\(PRND=(\d+), PRNA=(\d+), wn=(\d+), tow=(\d+), adkd=(\d+), outcome=<AuthOutcome\.INVALID_TAG.*')
+    res = np.zeros((0, 4))
+    with open(log, 'r') as f:
+        for line in f:
+            m = pattern.match(line)
+            if m:
+                prnd = int(m.group(1))
+                prna = int(m.group(2))
+                wn = int(m.group(3))
+                tow = int(m.group(4))
+                adkd = int(m.group(5))
+                epoch = gst.gst2timestamp(wn, tow)
+                record = np.array([epoch, prnd, prna, adkd]).reshape(1, -1)
+                res = np.concatenate((res, record), axis=0)
+    return res
+
+def read_crc_fails(log):
+    """Read successful authentication from a log.
+
+    :log: file with the output of the FGI-OSNMA.
+    :returns: crc failures as numpy array.
+    Columns: epoch, svid
+
+    """
+    pattern = re.compile('Page CRC failed: SVID: (\d+), WN: (\d+), TOW: (\d+)')
+    res = np.zeros((0, 2))
+    with open(log, 'r') as f:
+        for line in f:
+            m = pattern.match(line)
+            if m:
+                svid = int(m.group(1))
+                wn = int(m.group(2))
+                tow = int(m.group(3))
+                epoch = gst.gst2timestamp(wn, tow)
+                record = np.array([epoch, svid]).reshape(1, -1)
+                res = np.concatenate((res, record), axis=0)
+    return res
+
+def read_simultaneous_authentication_count(auths):
+    """Return the number of simultaneous authentications from the list of
+    authentications. Only ADKD=0 authentications are considered.
+
+    :auths: authentications as returned from read_auths
+    :returns: numpy array with columns (epoch, count)
+
+    """
+    epochs = np.unique(auths[:, 0])
+    counts = np.zeros((epochs.shape[0], 2))
+    counts[:, 0] = epochs
+
+    for i, epoch in enumerate(epochs):
+        # Get the ADKD=0 authentication with the given epoch and take only the
+        # unique PRNDs (SVIDs) as the count
+        sel = np.logical_and(auths[:, 0] == epoch, auths[:, -1] == 0)
+        svids = np.unique(auths[sel, 1])
+        counts[i, 1] = svids.shape[0]
+
+    return counts
+
+def read_log_file(log):
+    """Read authentication and other events from a log file.
+
+    :log: file to read the events from
+    :returns: (auths, invalid_tags, crc_fails, auth_counts)
+
+    """
+    auths = read_auths(log)
+    invalid_tags = read_invalid_tags(log)
+    crc_fails = read_crc_fails(log)
+    auth_counts = read_simultaneous_authentication_count(auths)
+    return (auths, invalid_tags, crc_fails, auth_counts)
+
+def dateformatter(epoch, pos=None):
+    date = datetime.datetime.fromtimestamp(epoch)
+    return date.strftime("%b") + ". " + date.strftime("%d") + "th\n" + date.strftime("%H:%M")
+
+def plot_authentication_timeline(data):
+    """Produce a timeline with all of the authentication information in it.
+
+    :data: triple of numpy arrays (auths, invalid_tags, failed_crcs) as
+    received from read_log_file
+    """
+    auths, invalid_tags, failed_crcs, _ = data
+    is_crossauth = auths[:, 1] != auths[:, 2]
+    not_crossauth = np.logical_not(is_crossauth)
+    is_adkd12 = auths[:, 3] == 12
+    is_adkd4 = auths[:, 3] == 4
+    is_adkd0 = auths[:, 3] == 0
+
+    plt.rcParams["font.size"] = 16
+    plt.gca().xaxis.set_major_formatter(dateformatter)
+    s = 4
+    # Separate some of the lines a little to improve readability
+    linediff = 0.25
+
+    plt.grid(1)
+    plt.title(f"FGI-OSNMA: Satellite authentication status timeline")
+    plt.ylabel("SVID")
+    plt.yticks(np.arange(1, 37, dtype=int))
+
+    sel = np.logical_and(is_adkd12, np.logical_not(is_crossauth))
+    plt.scatter(auths[sel, 0], auths[sel, 1],
+                c="#ff00ff", s=s)
+    sel = np.logical_and(is_adkd12, is_crossauth)
+    plt.scatter(auths[sel, 0], auths[sel, 1],
+                c="#aaaa00", s=s)
+
+    # ADKD=0
+    sel = np.logical_and(not_crossauth, is_adkd0)
+    plt.scatter(auths[sel, 0], auths[sel, 1] - linediff,
+                c="#0000aa", s=s,
+                label="Satellite authenticated itself (ADKD=0)")
+    sel = np.logical_and(is_crossauth, is_adkd0)
+    plt.scatter(auths[sel, 0], auths[sel, 1] + linediff,
+                c="#00aa00", s=s)
+    # ADKD=4
+    sel = is_adkd4
+    plt.scatter(auths[sel, 0], np.zeros(sel.sum()),
+                c="black", s=s)
+
+    # Failed to authenticate tag
+    plt.scatter(invalid_tags[:, 0], invalid_tags[:, 1] - linediff,
+                c="#cc0000", s=4*s,
+                marker='x')
+
+    # CRCs
+    plt.scatter(failed_crcs[:, 0], failed_crcs[:, 1] + linediff,
+                c="#cc0000", s=4*s,
+                marker='|')
+
+    markersize = 10
+    custom_markers = [
+            Line2D([0], [0], lw=0, color='w', markerfacecolor="#ff00ff", marker='o', markersize=markersize),
+            Line2D([0], [0], lw=0, color='w', markerfacecolor="#aaaa00", marker='o', markersize=markersize),
+            Line2D([0], [0], lw=0, color='w', markerfacecolor="#0000aa", marker='o', markersize=markersize),
+            Line2D([0], [0], lw=0, color='w', markerfacecolor="#00aa00", marker='o', markersize=markersize),
+            Line2D([0], [0], lw=0, color='w', markerfacecolor="black", marker='o', markersize=markersize),
+            Line2D([0], [0], lw=0, color='r', markerfacecolor="#cc0000", marker='x', markersize=markersize),
+            Line2D([0], [0], lw=0, color='r', markerfacecolor="#cc0000", marker='|', markersize=markersize),
+            ]
+
+    plt.legend(custom_markers, 
+              ['Slow MAC self-authentication (ADKD=12)',
+               'Slow MAC cross-authentication (ADKD=12)',
+               'Satellite authenticated itself(ADKD=0)',
+               'Cross authenticated satellite(ADKD=0)',
+               'Galileo timing authentication (ADKD=4)',
+               'Tag authentication failed',
+               'Page with failed CRC',
+               ],
+               loc="upper right", bbox_to_anchor=(1.005, 1.005))
+    plt.show()
+
+def print_statistics(data):
+    """Print some statistics related to authentication events.
+
+    :data: data as received from read_log_file
+
+    """
+    auths, invalid_tags, failed_crcs, auth_counts = data
+
+    fix_ratio = np.mean(auth_counts[:, 1] >= 4)
+    print("% of time when 4 or more satellites are authenticated:", fix_ratio)
+
+    percentiles = np.percentile(auth_counts[:, 1], [10, 25, 50, 75, 90, 100])
+    print("Percentiles: 0.1, 0.25, 0.5, 0.75, 0.9 1.0")
+    print(percentiles)
+    print("Mean simultaneous authenticated satellites:", auth_counts[:, 1].mean())
+    print("Max simultaneous authenticated satellites:", auth_counts[:, 1].max())
+    print("Min simultaneous authenticated satellites:", auth_counts[:, 1].min())
+
+    print("Authentications ADKD=0:", (auths[:, -1] == 0).sum())
+    print("Authentications ADKD=4:", (auths[:, -1] == 4).sum())
+    print("Authentications ADKD=12:", (auths[:, -1] == 12).sum())
+
+    print("Self-authentications ADKD=0:", (auths[:, 1] == auths[:, 2]).sum())
+    print("Cross-authentications ADKD=0:", (auths[:, 1] != auths[:, 2]).sum())
+    print("Ratio self-auths/all-auths", (auths[:, 1] == auths[:, 2]).mean())
+
+    print("Authentications failed:", invalid_tags.shape[0])
+
+    print("Failed CRCs:", failed_crcs.shape[0])
+
+def plot_auth_count_timeline(auth_count):
+    """Produce a visualization with the number of simultaneous authenticated
+    satellites over time.
+
+    :auth_count: authentication counts as gained from read_log_file
+
+    """
+    plt.rcParams["font.size"] = 16
+    plt.grid()
+    plt.gca().xaxis.set_major_formatter(dateformatter)
+    plt.ylabel("Number of simultaneous authenticated satellites")
+    plt.plot(auth_count[:, 0], auth_count[:, 1], c="b", linewidth=1)
+    plt.show()
+
+def main(args):
+    data = read_log_file(args.input)
+
+    if args.all or args.timeline:
+        plot_authentication_timeline(data)
+    if args.all or args.stats:
+        print_statistics(data)
+    if args.all or args.auth_count_timeline:
+        plot_auth_count_timeline(data[-1])
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=DESCRIPTION)
+    parser.add_argument("-i", "--input", type=str, required=True,
+                        help="Authentication events as received from osnma-cli to visualize")
+    parser.add_argument("-t", "--timeline", action="store_true",
+                        help="Produce authentication status timeline")
+    parser.add_argument("-s", "--stats", action="store_true",
+                        help="Report statistics")
+    parser.add_argument("-c", "--auth-count-timeline", action="store_true",
+                        help="Produce timeline of simultaneous authenticated satellites")
+
+    parser.add_argument("-a", "--all", action="store_true",
+                        help="Report all")
+    args = parser.parse_args()
+
+    main(args)
