@@ -25,17 +25,10 @@ serial:dev:baudrate     - Read from a serial device
 net:ip:port             - Read data from the network
 """
 
-# Creating a datasource from a string
-def source(string):
-    try:
-        return (Source.from_string(string))
-    except:
-        raise (argparse.ArgumentError)
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=DESCRIPTION,
                                      formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument("-i", "--input", type=source, required=True,
+    parser.add_argument("-i", "--input", type=str, required=True,
                         help=INPUT_DESCRIPTION)
     parser.add_argument("-p", "--protocol", type=str,
                         choices=['sbf', 'ascii'], default='sbf',
@@ -50,7 +43,8 @@ if __name__ == '__main__':
                         help="Allow gaps in the subframes")
     args = parser.parse_args()
 
-    reader = PageReader.from_string(args.protocol, args.input)
+    source = Source.from_string(args.input)
+    reader = PageReader.from_string(source, args.protocol)
     sf_factory = SubframeFactory(reader, args.allow_gaps)
     public_key = open(args.public_key_path).read()
     osnma = OsnmaEngine(public_key)

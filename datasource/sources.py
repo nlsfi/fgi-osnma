@@ -8,17 +8,20 @@ class SourceException(Exception):
 class FileSource:
     """Encapsulates the details of reading from a file"""
 
-    class FileSourceException(SourceException):
-        pass
-
-    def __init__(self, filepath):
-        self.file = open(filepath, 'rb')
+    def __init__(self, filepath, mode='rb'):
+        self.file = open(filepath, mode)
 
     def read(self, nbytes):
         bytes_chunk = self.file.read(nbytes)
         if len(bytes_chunk) != nbytes:
-            raise FileSource.FileSourceException('EOF reached.')
+            raise SourceException('EOF reached.')
         return bytes_chunk
+
+    def readline(self):
+        line = self.file.readline()
+        if not line:
+            raise SourceException('EOF reached.')
+        return line
 
     def flush(self):
         pass
@@ -120,4 +123,4 @@ class Source:
             port = tok[2]
             return NetSource(ip, port)
         else:
-            raise Exception("Invalid type")
+            raise Exception("Invalid type for a Source")

@@ -1,6 +1,7 @@
 import copy
 import util.gst as gst
 
+from datetime import datetime
 from bitstring import BitArray
 from collections import defaultdict
 from dataclasses import dataclass
@@ -118,9 +119,14 @@ class InavPage(gst.ObjectWithGst):
         Galileo time of week. Inherited from superclass.
     page_number: int
         The number of the page, starting from 0. Is calculated from the tow.
+    arrival_dt: datetime
+        Optional: datetime of the reception of the InavPage. In realtime
+        operations this can be used the check the consistency between the
+        system time and receiver time.
     """
     svid: int
     navbits: BitArray
+    arrival_dt: datetime = None
 
     def __post_init__(self):
         self.page_number = (self.tow % 30) // 2
@@ -204,7 +210,7 @@ class SubframeFactory:
 
     def read(self):
         while True:
-            page, arrival_dt = self.pagereader.read()
+            page = self.pagereader.read()
 
             if page == None:
                 continue

@@ -111,7 +111,7 @@ class GalRawINavBlock(SbfBlockBase):
         self.rx_channel = rx_channel
         self.nav_bits = nav_bits
 
-    def to_inav_page(self):
+    def to_inav_page(self, arrival_dt=None):
         """Convert the SBF GalRawInavBlock to a InavPage object. If the signal
         type is not E1 or the CRC is not passed, or if it contains invalid
         values, return None.
@@ -153,7 +153,7 @@ class GalRawINavBlock(SbfBlockBase):
         oddpage = bits[120 - 6 : 120 - 6 + 120]
         navbits = evenpage + oddpage
 
-        return InavPage(gst.wn, gst.tow, self.sv_id, navbits)
+        return InavPage(gst.wn, gst.tow, self.sv_id, navbits, arrival_dt=arrival_dt)
 
     @staticmethod
     def FromRawBlock(rawBlk):
