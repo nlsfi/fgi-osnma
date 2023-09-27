@@ -30,8 +30,8 @@ and registering it in the `datasink/subconfig.py` file.
 
 ## Usage
 
-As a Python project, FGI-OSNMA should be cross-platform, but it is currently
-tested only under Linux. Testing the project under Windows is in progress.
+As a Python project, FGI-OSNMA is cross-platform. The project has been tested
+under Linux and Windows.
 
 ### CLI
 
@@ -61,10 +61,8 @@ information is received. Examples of this can be seen from the
 
 - 14.09.2023: Initial import.
     - TODO:
-        - Add immediately runnable examples
         - Extend documentation
         - Resolve TODOs in the code
         - Add link to ION-GNSS+ 2023 publication
-        - Test the project under Windows
         - Add unit tests
         - Replace crc16 module: has problems with certain Python versions
