@@ -60,9 +60,9 @@ information is received. Examples of this can be seen from the
 ## Changelog/TODOs
 
 - 14.09.2023: Initial import.
-    - TODO:
-        - Extend documentation
-        - Resolve TODOs in the code
-        - Add link to ION-GNSS+ 2023 publication
-        - Add unit tests
-        - Replace crc16 module: has problems with certain Python versions
+
+- TODO:
+    - Extend documentation
+    - Resolve TODOs in the code
+    - Add link to ION-GNSS+ 2023 publication
+    - Add unit tests

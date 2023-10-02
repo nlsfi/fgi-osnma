@@ -5,8 +5,8 @@ References:
     [1]- mosaic-X5 Reference Guide
 """
 from datetime import datetime, timezone
+from crccheck.crc import Crc16
 
-import crc16
 import struct
 
 from bitstring import BitArray
@@ -302,7 +302,7 @@ class SbfBlockFactory:
             if not (length % 4 == 0):  # length must be a multiple of 4
                 continue
             buffer.extend(source.read(length - 8))  # sync, CRC, ID and length fields (8 bytes) are already read
-            crc_computed = crc16.crc16xmodem(bytes(buffer))
+            crc_computed = Crc16.calc(bytes(buffer))
             if not (crc_computed == crc):
                 continue
             block_body = buffer[4:]
