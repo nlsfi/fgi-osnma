@@ -71,15 +71,15 @@ def read_crc_fails(log):
     Columns: epoch, svid
 
     """
-    pattern = re.compile('Page CRC failed: SVID: (\d+), WN: (\d+), TOW: (\d+)')
+    pattern = re.compile('Page CRC failed. WN: (\d+), TOW: (\d+), SVID: (\d+)')
     res = np.zeros((0, 2))
     with open(log, 'r') as f:
         for line in f:
             m = pattern.match(line)
             if m:
-                svid = int(m.group(1))
-                wn = int(m.group(2))
-                tow = int(m.group(3))
+                wn = int(m.group(1))
+                tow = int(m.group(2))
+                svid = int(m.group(3))
                 epoch = gst.gst2timestamp(wn, tow)
                 record = np.array([epoch, svid]).reshape(1, -1)
                 res = np.concatenate((res, record), axis=0)

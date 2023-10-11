@@ -114,7 +114,7 @@ class OsnmaEngine:
             subframe_GST = GalileoSystemTime(subframe.wn, subframe.tow)
 
             # Raise exception if OSNMA field is all zeros
-            HKROOT, MACK = self.decoder.extract_and_concatenate_OSNMA_bits(subframe.data)
+            HKROOT, MACK = self.decoder.extract_and_concatenate_OSNMA_bits(subframe)
 
             self.navdata_manager.extract_and_insert_authdata(subframe)
             self.pending_subframes.append((copy.deepcopy(subframe_GST), subframe.svid, copy.deepcopy(subframe.data)))
@@ -168,7 +168,7 @@ class OsnmaEngine:
             # cross authentication. Note: no need to add ADKD=4 auth data
             self.navdata_manager.extract_and_insert_authdata(subframe, False, True)
 
-            self.subscribers.send_osnma_exception(f'{e} {subframe_GST}')
+            self.subscribers.send_osnma_exception(e)
 
     def authenticate(self, tesla_key: TeslaKey=None, alpha: BitArray=None, nma_header: NmaHeader=None):
         '''
@@ -325,11 +325,13 @@ class OsnmaEngine:
 
         """
         for this_gst, this_svid, this_subframe in self.pending_subframes:
-            tag0, tags_and_info = self.decoder.extract_tags(this_subframe)
+            wn = this_gst.wn
+            tow = this_gst.tow
+            tag0, tags_and_info = self.decoder.extract_tags(InavSubframe(wn, tow, this_svid, this_subframe))
             try:
                 self.authenticator.verify_tag_info_list(self.config.MACLT, tags_and_info, this_gst, this_svid)
             except OsnmaAuthenticationException as e:
-                self.subscribers.send_osnma_exception(OsnmaException("Tag sequence verification failed."))
+                self.subscribers.send_osnma_exception(OsnmaException(f"Tag sequence verification failed. WN: {wn}, TOW: {tow}, SVID: {this_svid}"))
             else: # Add tags
                 tag_list, info_list = tags_and_info.tag_list, tags_and_info.info_list
 

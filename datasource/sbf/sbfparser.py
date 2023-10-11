@@ -128,7 +128,7 @@ class GalRawINavBlock(SbfBlockBase):
         if self.signal_type != "E1":
             return None
         if self.crc_passed == 0:
-            print(f"Page CRC failed: SVID: {self.sv_id}, WN: {wn}, TOW: {tow}")
+            print(f"Page CRC failed. WN: {wn}, TOW: {tow}, SVID: {self.sv_id}")
             return None
         # See SBF do not use values
         if not (tow >= 0 and tow <= 604799):

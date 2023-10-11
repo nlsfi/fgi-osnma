@@ -84,7 +84,7 @@ class InavSubframe(gst.ObjectWithGst):
             return None
 
         if len(pages) < 15:
-            print("Gap in subframe:", pages[0].svid, pages[0].wn, pages[0].tow)
+            print(f"Incomplete subframe. WN: {pages[0].wn}, TOW: {pages[0].tow}, SVID: {pages[0].svid}")
 
         # If we do not allow gaps in the subframe, make sure that we have
         # exactly 15 pages, each with 2 second offset from the previous (so 30s

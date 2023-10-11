@@ -151,40 +151,43 @@ class OsnmaDecoder:
             return self.parse_dsm_kroot_message(dsm_msg)
         return self.parse_dsm_pkr_message(dsm_msg)
 
-    def extract_tags(self, subframe_data: BitArray):
+    def extract_tags(self, subframe: InavSubframe):
         """Extract tags from InavSubframe
 
-        :subframe_data: subframe data as BitArray
+        :subframe: InavSubframe object
         :returns: extracted tag0 and tags_and_info fields
 
         """
-        _, MACK = self.extract_and_concatenate_OSNMA_bits(subframe_data)
+        _, MACK = self.extract_and_concatenate_OSNMA_bits(subframe)
         mack_header, MACK_tags_and_info, _ = self.parse_MACK_message(MACK)
         tag0 = mack_header.TAG0
         tags_and_info = self.parse_MACK_tags_and_info(MACK, self.tag_size, self.key_size)
         return tag0, tags_and_info
 
-    def extract_and_concatenate_OSNMA_bits(self, subframe):
+    def extract_and_concatenate_OSNMA_bits(self, subframe: InavSubframe):
         """ Parses and concatenates the 40-bit OSNMA fields out of the subframe.
         :subframe: InavSubframe object
         :return: A pair (HKROOT, MACK) that contains the concatenated BitArrays the respective fields.
         """
         even_page_size = 114
         odd_page_size = 120
-        assert(len(subframe) == 15 * (even_page_size + odd_page_size))
+        assert(len(subframe.data) == 15 * (even_page_size + odd_page_size))
 
         HKROOT = BitArray() # 120 bits
         MACK = BitArray() # 480 bits
 
         for page_idx in range(0,15):
             start = (even_page_size + odd_page_size)*page_idx
-            page = subframe[start : start + even_page_size + odd_page_size]
+            page = subframe.data[start : start + even_page_size + odd_page_size]
             hkroot, mack = self.extract_osnma_field(page)
             HKROOT.append(hkroot)
             MACK.append(mack)
 
         if HKROOT.uint == 0 and MACK.uint == 0:
-            raise OSNMAFieldIsAllZerosException("All OSNMA bits in a frame are zeros.")
+            wn = subframe.wn
+            tow = subframe.tow
+            svid = subframe.svid
+            raise OSNMAFieldIsAllZerosException(f"No OSNMA bits available. WN: {wn}, TOW: {tow}, SVID: {svid}")
 
         return HKROOT, MACK
 
