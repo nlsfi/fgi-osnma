@@ -23,17 +23,19 @@ filepath                - Reads data from the given filepath
 file:filepath           - Same as above, only more explicit
 serial:dev:baudrate     - Read from a serial device
 net:ip:port             - Read data from the network
+
+If the option is not specified, stdin will be used.
 """
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=DESCRIPTION,
                                      formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument("-i", "--input", type=str, required=True,
+    parser.add_argument("-i", "--input", type=str,
                         help=INPUT_DESCRIPTION)
     parser.add_argument("-p", "--protocol", type=str,
                         choices=['sbf', 'ascii'], default='sbf',
                         help="Protocol/format of the input, such as SBF")
-    parser.add_argument("-k", "--public-key-path", type=str,
+    parser.add_argument("-k", "--public-key-path", type=str, required=True,
                         help="Path to public key file (pem)")
     parser.add_argument("-r", "--root-key-path", type=str,
                         help="Path to the TESLA root key")
@@ -41,20 +43,27 @@ if __name__ == '__main__':
                         help="Path to the Merkle tree file")
     parser.add_argument("-g", "--allow-gaps", action="store_true",
                         help="Allow gaps in the subframes")
+    parser.add_argument("-s", "--save-kroot", action="store_true",
+                        help="Store the received KROOT for later use")
     args = parser.parse_args()
 
     source = Source.from_string(args.input)
-    reader = PageReader.from_string(source, args.protocol)
+    reader = PageReader.create(source, args.protocol)
     sf_factory = SubframeFactory(reader, args.allow_gaps)
     public_key = open(args.public_key_path).read()
     osnma = OsnmaEngine(public_key)
     osnma.set_subscriber_system(subscriber_system)
 
+    if args.save_kroot:
+        osnma.save_kroot = True
+
     # Hot start
     # KROOT from the test vectors, might not work with other data
     if args.root_key_path:
-        dsm_kroot = BitArray(hex=open(args.root_key_path, "r").readline().rstrip())
-        osnma.decoder.input_dsm_kroot(dsm_kroot)
+        with open(args.root_key_path, 'r') as f:
+            kroot_bits = BitArray(hex=f.readline().rstrip())
+            dsm_kroot = osnma.decoder.parse_dsm_kroot_message(kroot_bits)
+            osnma.input_dsm_kroot(dsm_kroot)
 
     # Merkle tree for public key verification
     if args.merkle_tree:

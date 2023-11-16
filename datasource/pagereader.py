@@ -6,9 +6,11 @@ from datasource.sources import SourceException
 from datasource.sbf.sbfparser import SbfBlockFactory, GalRawINavBlock
 
 class PageReader:
+    """Class for reading navigation pages and returning InavPage objects.
+    """
     @staticmethod
-    def from_string(source, protocol):
-        """Create a PageReader from the specification string.
+    def create(source, protocol):
+        """Create a PageReader given the source and the protocol.
 
         :source: the source from which the data is read from
         :protocol: String specifying the type of the reader
@@ -47,7 +49,7 @@ class AsciiPageReader(PageReader):
     ASCII lines with format: svid, wn, tow, navigation_page_in_hex
     The delimiter can be set, and the file descriptor 'fd' can be anything with
     the method 'readline'. Therefore it can be for example an open file
-    descriptor (opened with 'open') or 'sys.stdin'.
+    descriptor (opened with 'open'), 'sys.stdin', or a 'FileSource'.
 
     We mostly use the "SBF-format" where the 6 zero-bits between the even and
     odd page are removed. Septentrio for example gives the pages already in
@@ -85,10 +87,10 @@ class AsciiPageReader(PageReader):
         navbits = BitArray()
         if self.remove_middle_6_bits:
             evenpage = page[:114]
-            oddpage = page[120:]
+            oddpage = page[120:240]
             navbits.append(evenpage)
             navbits.append(oddpage)
         else:
-            navbits = page
+            navbits = page[:234]
 
         return InavPage(wn, tow, svid, navbits, datetime.now())

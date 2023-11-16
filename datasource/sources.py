@@ -1,3 +1,4 @@
+import sys
 import time
 import serial
 import socket
@@ -8,8 +9,12 @@ class SourceException(Exception):
 class FileSource:
     """Encapsulates the details of reading from a file"""
 
-    def __init__(self, filepath, mode='rb'):
-        self.file = open(filepath, mode)
+    def __init__(self, filepath=None, mode='rb'):
+        if not filepath:
+            print("No source specification given: reading from stdin")
+            self.file = sys.stdin
+        else:
+            self.file = open(filepath, mode)
 
     def read(self, nbytes):
         bytes_chunk = self.file.read(nbytes)
@@ -93,12 +98,17 @@ class BufferedSerialPortDumperSource(SerialPortSource):
 class Source:
 
     @staticmethod
-    def from_string(string):
-        """Instantiates a Source object from a string.
-        Example strings
+    def from_string(string=None):
+        """Instantiates a Source object from a string. If an empty argument is
+        given, the source the default FileSource() (reading from stdin).
+
+        Example strings:
         - file:filepath
         - serial:dev:baudrate
         """
+        if not string:
+            return FileSource()
+
         tok = string.split(':')
 
         # Read from a filepath by default

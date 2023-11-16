@@ -1,3 +1,4 @@
+import sys
 import copy
 from bitstring import BitArray
 from collections import defaultdict
@@ -111,7 +112,13 @@ class OsnmaDecoder:
 
         # Handle first block if we have not started already
         if dsm_header.bid == 0 and self.number_of_dsm_blocks[dsm_type] == None:
-            num_blocks = self.parse_number_of_blocks_from_first_dsm_block(dsm_block, dsm_type)
+            # Exception will be thrown if the values in the block use reserved
+            # bits. If we hit reserved bits, we ignore the block (i.e. return)
+            try:
+                num_blocks = self.parse_number_of_blocks_from_first_dsm_block(dsm_block, dsm_type)
+            except Exception as e:
+                print(e, file=sys.stderr)
+                return
 
             # Allocate
             self.number_of_dsm_blocks[dsm_type] = num_blocks
@@ -137,6 +144,12 @@ class OsnmaDecoder:
             self.subscribers.send_info(f"DSM message of type {dsm_type} completed")
             
             dsm_msg = self._parse_dsm_message(full_dsm_msg, dsm_type)
+            # Make sure the message is valid (i.e. does not contain reserved
+            # values). Discard the message in case it is invalid.
+            if dsm_msg == None:
+                self.dsm_blocks[dsm_type] = None
+                self.number_of_dsm_blocks[dsm_type] = None
+                return
             return dsm_msg, dsm_type
 
     def _parse_dsm_message(self, dsm_msg, msg_type):
@@ -234,11 +247,19 @@ class OsnmaDecoder:
         mid = msg[4:8]
         itn = msg[8:8+1024]
         npkt = msg[1032:1036]
-        npkid = msg[1036:1040]
+        public_key_type = PUBLIC_KEY_TYPE_MAP[npkt.uint]
 
-        pubk_length = PUBLIC_KEY_LENGTH_MAP[PUBLIC_KEY_TYPE_MAP[npkt.uint]]
+        # Do not use messages with reserved values
+        if public_key_type == 'reserved' or public_key_type == 'osnma_alert_message':
+            return
+
+        npkid = msg[1036:1040]
+        pubk_length = PUBLIC_KEY_LENGTH_MAP[public_key_type]
+
         npk = msg[1040:1040+pubk_length]
 
+        # Note that the bit representation of the new public key type (npkt) is
+        # returned because that is needed during Merkle tree checks
         return DsmPkrMessage(msg, nbdp, mid, itn, npkt, npkid, npk)
 
     def parse_number_of_blocks_from_first_dsm_block(self, dsm_block: BitArray, msg=DsmMessageType.kroot):
@@ -341,7 +362,7 @@ class OsnmaDecoder:
         ADKD = info_bits[8:12].uint
         return MACK_tag_info(info_bits, PRND, ADKD)
 
-    def parse_dsm_kroot_message(self, message):
+    def parse_dsm_kroot_message(self, message: BitArray):
         nbdk = NBDK_MAP[message[0:4].uint]
         pkid = message[4:8].uint
         cidkr = message[8:10].uint
@@ -350,6 +371,12 @@ class OsnmaDecoder:
         mf = MF_MAP[message[14:16].uint]
         ks = KS_MAP[message[16:20].uint]
         ts = TS_MAP[message[20:24].uint]
+
+        # Do not use messages with reserved values
+        DNU = 'reserved'
+        if nbdk == DNU or hf == DNU or mf == DNU or ks == DNU or ts == DNU:
+            return
+
         maclt = message[24:32].uint
         # Bits message[32:36] are reserved
         wnk = message[36:48].uint

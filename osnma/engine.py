@@ -9,7 +9,7 @@ from util.gst import GalileoSystemTime
 from osnma.navdata import InavSubframe, NavDataManager
 from osnma.decoder import OsnmaDecoder
 from osnma.authentication import OsnmaAuthenticationException, OsnmaException, OsnmaAuthenticator, AuthOutcome, AuthAttempt
-from osnma.dsm import NmaHeader, DsmMessageType
+from osnma.dsm import NmaHeader, DsmMessageType, DsmKrootMessage
 from osnma.mack import TeslaKey
 from datasink.subscribers import SubscriberSystem
 
@@ -64,10 +64,13 @@ class OsnmaEngine:
     perform all of the required operations for the received subframe.
     """
 
-    def __init__(self, public_key_pem):
+    def __init__(self, public_key_pem, save_kroot=False):
         # Accumulated tags: dictionary with (gst, svid, adkd) -> list of tags
         self.collected_tags = defaultdict(list)
         self.pending_subframes = []
+
+        # Save the received KROOT so it can be used to hot start the next runs
+        self.save_kroot = save_kroot
 
         # Last received NMA header, verified NMA header, and Chain ID currently
         # in place, and whether End Of Chain event is coming
@@ -135,6 +138,8 @@ class OsnmaEngine:
                         self._stashed_kroot = dsm_msg
                     else:
                         self.validate_and_input_dsm_kroot(dsm_msg, self.current_nma_header)
+                        if self.save_kroot:
+                            self.write_kroot(dsm_msg)
                         self.subscribers.send_info("OSNMA Receiver initialization complete")
                 if dsm_type == DsmMessageType.pkr:
                     self._stash_pkr(dsm_msg)
@@ -466,3 +471,20 @@ class OsnmaEngine:
         _, _, mack_key = self.decoder.parse_MACK_message(MACK)
         parsed_key = TeslaKey(mack_key, gst)
         self.authenticator.verify_and_input_tesla_key(parsed_key)
+
+    def write_kroot(self, kroot: DsmKrootMessage, filename=None):
+        """Write the KROOT to a a file. If filename is not provided it will be
+        stored to a file called kroot_<wn>_<tow>.
+
+        :kroot: DsmKrootMessage
+        :returns: nothing
+
+        """
+        wn = kroot.wn_kroot
+        tow = kroot.tow_kroot
+
+        if filename == None:
+            filename = f"kroot_{wn}_{tow}"
+
+        with open(filename, 'w') as f:
+            f.write(kroot.raw_bits.hex)

@@ -6,6 +6,6 @@ data=$(realpath ./galrawinav-270923.sbf)
 pubk=$(realpath ./osnma-key-aug23.pem)
 
 cd ../app
-./osnma-cli \
+./osnma-cli $@ \
 	-i $data \
 	-k $pubk
